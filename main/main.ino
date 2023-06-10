@@ -17,8 +17,12 @@
 #define BLYNK_AUTH_TOKEN    "c6A6llVGDgG2EpUOALlMab_aCYOCUINw"
 
 //Wifi vars
-const char* ssid = "Kelton";
-const char* pass = "keltonpass";
+const char* ssid2 = "Kelton";
+const char* pass2 = "keltonpass";
+
+String ssid;
+String pass;
+
 
 //Time vars
 const char* ntpserver = "pool.ntp.org";
@@ -40,6 +44,11 @@ int maxh;
 int minh;
 int curh = 1;
 
+int bright = 100;
+int r = 0x00FF00;
+int g = 0x000000;
+int b = 0x000000;
+
 //Bluetooth vars
 BluetoothA2DPSink spkr;
 
@@ -60,6 +69,7 @@ WS2812FX leds[4] = {
 int curstate;
 int laststate;
 unsigned long lastpress = 0;
+int laststart;
 
 //App button functions. Changes in the corresponding pins call the function
 BLYNK_WRITE(V0)
@@ -100,9 +110,9 @@ BLYNK_WRITE(V6)
 
 BLYNK_WRITE(V4)
 {
-  int value = param.asInt();
+  bright = param.asInt();
   for(int i = 0; i < 4; i++){
-    leds[i].setBrightness(value);
+    leds[i].setBrightness(bright);
   }
 }
 
@@ -281,8 +291,43 @@ void select(int curs, int curhe){
         case 12:
           LCD_start();
           break;
-      }
-    break;
+        //Change Brightness
+        case 41:
+          bright = changeval(bright);
+
+          for(int i = 0; i < 4; i++){
+           leds[i].setBrightness(bright);
+          }
+          delay(200);
+          break;
+        //Change Red value
+        case 70:
+          r = changeval(r/65536)*65536;
+          for(int i = 0; i < 4; i++){
+           leds[i].setColor(r + g + b);
+          }
+          delay(200);
+          break;
+      
+        //Change Green value
+        case 99:
+          g = changeval(g/256)*256;
+          for(int i = 0; i < 4; i++){
+           leds[i].setColor(r + g + b);
+          }
+          delay(200);
+          break;
+      
+        //Change Blue value
+        case 128:
+          b = changeval(b);
+          for(int i = 0; i < 4; i++){
+           leds[i].setColor(r + g + b);
+          }
+          delay(200);
+          break;
+    }
+  break;
   }
 }
 
@@ -345,29 +390,6 @@ void audioresp(){
 
   lcd.fillCircle(6, curh, 3, TFT_BLACK);
 
-  i2s_pin_config_t my_pin_config = {
-    .bck_io_num = 25,
-    .ws_io_num = 33,
-    .data_out_num = 26,
-    .data_in_num = I2S_PIN_NO_CHANGE
-  };
-
-  static i2s_config_t i2s_config = {
-    .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX),
-    .sample_rate = 44100, // updated automatically by A2DP
-    .bits_per_sample = (i2s_bits_per_sample_t)32,
-    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-    .communication_format = (i2s_comm_format_t) (I2S_COMM_FORMAT_STAND_I2S),
-    .intr_alloc_flags = 1, // default interrupt priority
-    .dma_buf_count = 8,
-    .dma_buf_len = 64,
-    .use_apll = true,
-    .tx_desc_auto_clear = true // avoiding noise in case of data unavailability
-  };
-  
-  spkr.set_i2s_config(i2s_config);
-
-  spkr.set_pin_config(my_pin_config);
   spkr.start("Infinity Cube");
 
   lcd.println("   Bluetooth started");
@@ -402,7 +424,7 @@ void audioresp(){
           maxlvl = sample;
         }
         //Using map to figure out how bright it should be
-        int bright = map(sample, avglvl, maxlvl, 1, 255);
+        bright = map(sample, avglvl, maxlvl, 1, 255);
         for(int i = 0; i < 4; i++){
           leds[i].setBrightness(bright);
         }
@@ -425,8 +447,9 @@ void audioresp(){
   //This method is imperfect because it prevents reconnections
   spkr.end(true);
 
+  bright = 100;
   for(int i = 0; i < 4; i++){
-    leds[i].setBrightness(100);
+    leds[i].setBrightness(bright);
   }
   
   Blynk.connect();
@@ -440,7 +463,7 @@ void setscrn(){
   curscrn = 3;
   
   maxh = 12;
-  minh = 41;
+  minh = 128;
   curh = 12;
 
   lcd.fillScreen(TFT_BLUE);
@@ -450,14 +473,40 @@ void setscrn(){
   lcd.setFreeFont(FSB12);
 
   lcd.println("   1. Back");
-  lcd.println("   2. To Do: Add Settings");
+  lcd.print("   2. Change Brightness   :");
+  lcd.println(bright);
+  lcd.print("   3. Change Red Value    :");
+  lcd.println(r/65536);
+  lcd.print("   4. Change Green Value:");
+  lcd.println(g/256);
+  lcd.print("   5. Change Blue Value   :");
+  lcd.println(b);
 
   lcd.fillCircle(6, curh, 3, TFT_BLACK);
 }
 
 void wificonnect(){
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid2, pass2);
   Serial.println("Connecting...");
+
+  delay(500);
+
+  if(Blynk.connected() != true){
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.beginSmartConfig();
+    while(!WiFi.smartConfigDone()){
+    delay(500);
+    Serial.print(".");
+  }
+
+  ssid = WiFi.SSID();
+  pass = WiFi.psk();
+
+  const char* ssid3 = ssid.c_str();
+  const char* pass3 = pass.c_str();
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid3, pass3);
+  }
 
   while(Blynk.connected() != true){
     delay(500);
@@ -466,6 +515,28 @@ void wificonnect(){
   Serial.println("Connected");
 }
 
+int changeval(int val){
+  delay(200);
+  while(digitalRead(push) == HIGH){
+      curstate = digitalRead(cw);
+      if(curstate != laststate && curstate == 1){
+        if(digitalRead(ccw) != curstate && val > 1){
+          val--;
+          }
+          else if(val < 255){
+          val++;
+          }
+        lcd.fillRect(265, curh - 11, 40, 20, TFT_BLUE);
+        lcd.setCursor(265, curh + 8);
+        lcd.setTextColor(TFT_BLACK);
+        lcd.setFreeFont(FSB12);
+        lcd.print(val);
+        delay(5);
+    }
+    laststate = curstate;
+  }
+  return val; 
+}
 void setup() {
   Serial.begin(115200);
   //set up wifi connection
@@ -473,6 +544,31 @@ void setup() {
   
   //set up time
   configTime(offset, dayoffset, ntpserver);
+
+  //set up i2s
+  i2s_pin_config_t my_pin_config = {
+    .bck_io_num = 25,
+    .ws_io_num = 33,
+    .data_out_num = 26,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+
+  static i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = 44100, // updated automatically by A2DP
+    .bits_per_sample = (i2s_bits_per_sample_t)32,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t) (I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = 1, // default interrupt priority
+    .dma_buf_count = 8,
+    .dma_buf_len = 64,
+    .use_apll = true,
+    .tx_desc_auto_clear = true // avoiding noise in case of data unavailability
+  };
+  
+  spkr.set_i2s_config(i2s_config);
+
+  spkr.set_pin_config(my_pin_config);
 
   //set up lcd
   lcd.begin();
@@ -496,7 +592,6 @@ void setup() {
   pinMode(39, INPUT);
 
   laststate = digitalRead(cw);
-
 }
 
 void loop() {
@@ -505,6 +600,8 @@ void loop() {
     leds[i].service();
   }
 
+  // variable to make sure start screen stays up to date
+  laststart = millis();
   //Read current state of rotary encoder
   curstate = digitalRead(cw);
 
@@ -530,5 +627,8 @@ void loop() {
     lastpress = millis();
   }
 
+  if(millis() > laststart + 30000 && curscrn == 1){
+    LCD_start();
+  }
   delay(1);
 }
